@@ -1,0 +1,22 @@
+fn update() {
+	if (1) {
+		variable1 = test(1);
+	} elif (0)
+		variable1 = test(2);
+	else
+		variable1 = test(3);
+
+	for i(0, variable1) {
+		variable2 = variable2 + 1;
+	}
+	testvar = 4;
+}
+
+fn test(arg)
+	return (arg * 2) + 1;
+
+
+if (1) {
+	variable1 = test(1);
+} elif (0)
+	variable1 = test(2);

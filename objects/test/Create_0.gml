@@ -1,0 +1,1 @@
+honey = new Honey("test.hhll");
