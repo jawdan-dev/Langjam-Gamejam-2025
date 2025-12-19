@@ -9,6 +9,7 @@ function HoneyNode(name) constructor {
 	m_name = name;
 	m_value = 0;
 	m_connections = [];
+	m_activity = 0.0;
 }
 
 function HoneyNodeConnection(to, type, args = []) constructor {
@@ -16,6 +17,7 @@ function HoneyNodeConnection(to, type, args = []) constructor {
 	m_type = type;
 	m_args = args;
 	m_variables = [];
+	m_activity = 0.0;
 }
 
 function Honey(filePath = "") constructor {
@@ -23,6 +25,7 @@ function Honey(filePath = "") constructor {
 	m_variables = [];
 	m_functions = [];
 	m_anonymousCounter = 0;
+	m_drawSurface = -1;
 	
 	function isVariable(char) {
 		return string_pos(char, "#qwertyuiopasdfghjklzxcvbnm") > 0;
@@ -137,10 +140,13 @@ function Honey(filePath = "") constructor {
 	static addVariable = function(node, variable) {		
 		node.m_variables[array_length(node.m_variables)] = getNode(variable);
 	}
-
 	static evaluate = function(args) {
 		if (!is_array(args)) 
 			throw("CANNOT EVALUATE NON-ARRAY \"" + string(args) + "\", THANKS");
+		
+		function bumpActivity(target) {
+			target.m_activity += 0.01666;
+		}
 		
 		function evaluateHelper(args, origin) {
 			var result = {
@@ -154,7 +160,9 @@ function Honey(filePath = "") constructor {
 			var firstChar = string_char_at(symbol, 1);
 			
 			if (isVariableName(symbol)) {
-				result.m_value = getNode(args[origin]).m_value;
+				var node = getNode(args[origin]);
+				bumpActivity(node);
+				result.m_value = node.m_value;
 			} else if (isNumber(firstChar)) {
 				result.m_value = real(args[origin]);
 			} else if (isSymbol(symbol)) {
@@ -165,11 +173,11 @@ function Honey(filePath = "") constructor {
 				
 				switch (symbol) {
 					default: throw("EVALUATION SYMBOL \"" + symbol + "\" NOT COVERED."); break;
-					case "<": result.m_value = leftResult.m_value < rightResult.m_value ? 1 : 0;
-					case "+": result.m_value = leftResult.m_value + rightResult.m_value;
-					case "-": result.m_value = leftResult.m_value - rightResult.m_value;
-					case "*": result.m_value = leftResult.m_value * rightResult.m_value;
-					case "/": result.m_value = leftResult.m_value / rightResult.m_value;
+					case "<": result.m_value = leftResult.m_value < rightResult.m_value ? 1 : 0; break;
+					case "+": result.m_value = leftResult.m_value + rightResult.m_value; break;
+					case "-": result.m_value = leftResult.m_value - rightResult.m_value; break;
+					case "*": result.m_value = leftResult.m_value * rightResult.m_value; break;
+					case "/": result.m_value = leftResult.m_value / rightResult.m_value; break;
 				}
 			} else if (symbol == "@") {
 				result.m_left = origin + 1;
@@ -180,15 +188,13 @@ function Honey(filePath = "") constructor {
 					throw("COULD NOT FIND FUNCTION ARGS FOR \"" + functionName + "\"");
 				
 				var argumentCount = array_length(functionArgs) > 0 ? 1 : 0;
-				result.m_right += argumentCount * 2;
-				if (array_length(functionArgs) > 1) {
-					while (args[result.m_right] == ",")  {
-						result.m_right++;
-						argumentCount++;
-					}
+				result.m_right = result.m_left + argumentCount;
+				while (args[result.m_right] == ",")  {
+					result.m_right++;
+					argumentCount++;
 				}
 				if (argumentCount < array_length(functionArgs))
-					throw("MORE ARGUMENTS NEEDED FOR FUNCTION CALL TO \"" + functionName + "\"");
+					throw("MORE ARGUMENTS NEEDED FOR FUNCTION CALL TO \"" + functionName + "\""); // this should be in the read stage lol
 				
 				var arguments = [];
 				for (var i = 0; i < argumentCount; i++) {
@@ -198,6 +204,7 @@ function Honey(filePath = "") constructor {
 				}
 				
 				result.m_value = call(functionName, arguments);
+				bumpActivity(functionNode);
 			} else {
 				throw("CANNOT EVALUATE SYMBOL \"" + symbol + "\".");
 			}
@@ -206,6 +213,10 @@ function Honey(filePath = "") constructor {
 		return evaluateHelper(args, 0).m_value;
 	}
 	static call = function(name, args = []) {
+		function bumpActivity(target) {
+			target.m_activity += 0.01666;
+		}
+		
 		function callNode(startNode) {
 			var currentNode = startNode;
 			do {
@@ -213,6 +224,7 @@ function Honey(filePath = "") constructor {
 				for (var i = 0; i < connectionCount; i++) {
 					var _currentNode = currentNode;
 					var connection = currentNode.m_connections[i];
+					bumpActivity(connection);
 					switch (currentNode.m_connections[i].m_type) {
 						case HoneyConnection.SET: 
 							getNode(connection.m_args[0]).m_value = evaluate(connection.m_args[1]);
@@ -240,16 +252,83 @@ function Honey(filePath = "") constructor {
 		var functionName = getFunctionName(name, "");
 		for (var i = 0; i < array_length(m_functions); i++) {
 			if (m_functions[i].m_name != functionName) continue;
+			var argumentCount = array_length(m_functions[i].m_args);
+			if (array_length(args) < argumentCount)
+				throw("MORE ARGUMENTS NEEDED FOR FUNCTION CALL TO \"" + name + "\"");
+			for (var a = 0; a < argumentCount; a++) {
+				getNode(m_functions[i].m_args[a]).m_value = args[a];
+			}
 			return callNode(m_functions[i]);
 		}
 		return undefined;
 	}
-	static draw = function(x, y, w, h) {
+	static coolActivity = function() {
+		function cool(v) {
+			return v * 0.98;
+		}
 		var nodeCount = array_length(m_nodes);
-		
-		var cx = x + (w * 0.5);
-		var cy = y + (h * 0.5);
-		var size = min(w, h) * 0.5;
+		for (var i = 0; i < nodeCount; i++) {
+			m_nodes[i].m_activity = cool(m_nodes[i].m_activity);
+			var connectionCount = array_length(m_nodes[i].m_connections);
+			for (var c = 0; c < connectionCount; c++) {
+				m_nodes[i].m_connections[c].m_activity = cool(m_nodes[i].m_connections[c].m_activity);
+			}
+		}
+	}
+	static draw = function(x, y, w, h) {
+		if (w <= 0 || h <= 0) return;
+		if (!surface_exists(m_drawSurface)) {
+			m_drawSurface = surface_create(w, h);
+		} else if (surface_get_width(m_drawSurface) != w || surface_get_height(m_drawSurface) != h) {
+			surface_resize(m_drawSurface, w, h);
+		}
+		surface_set_target(m_drawSurface);
+		draw_clear_alpha(c_black, 0);
+		gpu_set_blendmode(bm_add);
+	
+		#macro DRAW_DEBUG (keyboard_check(vk_tab))
+		#macro DRAW_SCALE 10.0
+		#macro DRAW_SIZE 300.0
+		#macro DRAW_BORDER 30.0
+	
+		function activityFunc(v) {
+			return 1.0 - power(1.0 - clamp((v * 0.5), 0.005, 1.0), 20.0);
+		}
+	
+		function drawText(tx, ty, text) {
+			if (DRAW_DEBUG) {
+				draw_text(tx, ty, text);
+				return;
+			}		
+		}
+	
+		function drawLine(fromX, fromY, toX, toY, thickness, activityFactor = 0.0) {
+			if (DRAW_DEBUG) {
+				draw_line(fromX, fromY, toX, toY);
+				return;
+			}			
+			var rot = 90 - radtodeg(arctan2(toY - fromY, toX - fromX));
+			var rx = toX - fromX, ry = toY - fromY;
+			var scale = (1.0 / DRAW_SIZE);
+			var length = sqrt((rx * rx) + (ry * ry));
+			var endScale = thickness * scale * DRAW_SCALE * 2.0 * activityFunc(activityFactor);
+			draw_sprite_ext(sprite_honey, 1, (fromX + toX) * 0.5, (fromY + toY) * 0.5, endScale, length * scale, rot, c_white, 1.0);
+			draw_sprite_ext(sprite_honey, 2, fromX, fromY, endScale, endScale, 180 + rot, c_white, 1.0);
+			draw_sprite_ext(sprite_honey, 2, toX, toY, endScale, endScale, rot, c_white, 1.0);
+		}
+		function drawCircle(cx, cy, radius, activityFactor = 0.0) {
+			if (DRAW_DEBUG) {
+				draw_circle(cx, cy, radius, true);
+				return;
+			}
+			var scale = (radius / DRAW_SIZE) * 3.0 * DRAW_SCALE * activityFunc(activityFactor);
+			draw_sprite_ext(sprite_honey, 0, cx, cy, scale, scale, 0, c_white, 1.0); 
+		}
+	
+		var nodeCount = array_length(m_nodes);
+		var cx = 0 + (w * 0.5);
+		var cy = 0 + (h * 0.5);
+		var size = (min(w, h) * 0.5) - DRAW_BORDER;
 		
 		function getIndex(nodes, node) {
 			var nodeCount = array_length(nodes);
@@ -265,8 +344,8 @@ function Honey(filePath = "") constructor {
 					
 			var dx = cx + (sin(a * i) * size), dy = cy + (-cos(a * i) * size);
 			
-			draw_circle(dx, dy, 8.0, true);
-			draw_text(dx, dy, m_nodes[i].m_name);
+			drawCircle(dx, dy, 8.0, m_nodes[i].m_activity);
+			drawText(dx, dy, m_nodes[i].m_name);
 			
 			var connectionCount = array_length(m_nodes[i].m_connections);
 			for (var c = 0; c < connectionCount; c++) {
@@ -282,8 +361,8 @@ function Honey(filePath = "") constructor {
 					case HoneyConnection.JUMP: draw_set_color(c_aqua); break;
 					case HoneyConnection.SET: draw_set_color(c_green); break;
 				}
-				draw_line(dx, dy, tx, ty);
-				//draw_circle(tx - rx * 0.1, ty - ry * 0.1, 5.0, false);
+				drawLine(dx, dy, tx, ty, 3.0, m_nodes[i].m_connections[c].m_activity);
+				drawCircle(tx - rx * 0.1, ty - ry * 0.1, 5.0, m_nodes[i].m_connections[c].m_activity);
 			}
 			for (var c = 0; c < connectionCount; c++) {
 				var to = m_nodes[i].m_connections[c].m_to;
@@ -300,11 +379,32 @@ function Honey(filePath = "") constructor {
 				
 					var fx = cx + (sin(a * toIndex) * size),
 						fy = cy + (-cos(a * toIndex) * size);
-					draw_line(fx, fy, dx + (rx * 0.7), dy + (ry * 0.7));
-					draw_circle(dx + (rx * 0.7), dy + (ry * 0.7), 3.0, false);
+					drawLine(fx, fy, dx + (rx * 0.7), dy + (ry * 0.7), 1.5, m_nodes[i].m_connections[c].m_activity);
+					drawCircle(dx + (rx * 0.7), dy + (ry * 0.7), 3.0, m_nodes[i].m_connections[c].m_activity);
 				}
 			}
 		}
+		
+		gpu_set_blendmode(bm_normal);
+		surface_reset_target();
+		
+		if (!DRAW_DEBUG) {
+			gpu_set_texfilter(true);
+			gpu_set_texrepeat(true)
+			shader_set(shader_honey);
+			shader_set_uniform_f(shader_get_uniform(shader_honey, "current_time"), current_time / 1000.0);
+			texture_set_stage(shader_get_sampler_index(shader_honey, "noise_texture"), sprite_get_texture(sprite_noise, 0));
+		}
+		
+		draw_surface(m_drawSurface, x, y);
+		
+		if (!DRAW_DEBUG) {
+			shader_reset();
+			gpu_set_texrepeat(true);
+			gpu_set_texfilter(false);
+		}
+
+		coolActivity();
 	}
 	
 	static parseCode = function(code, selfInfo = {}) {

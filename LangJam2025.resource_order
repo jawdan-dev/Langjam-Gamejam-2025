@@ -16,5 +16,8 @@
     {"name":"Extensions","order":14,"path":"folders/Extensions.yy",},
     {"name":"Particle Systems","order":15,"path":"folders/Particle Systems.yy",},
   ],
-  "ResourceOrderSettings": [],
+  "ResourceOrderSettings": [
+    {"name":"sprite_noise","order":2,"path":"sprites/sprite_noise/sprite_noise.yy",},
+    {"name":"sprite_honey","order":1,"path":"sprites/sprite_honey/sprite_honey.yy",},
+  ],
 }
