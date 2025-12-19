@@ -10,6 +10,8 @@ function HoneyNode(name) constructor {
 	m_value = 0;
 	m_connections = [];
 	m_activity = 0.0;
+	m_lastValue = 0.0;
+	m_valueActivity = 0.0;
 }
 
 function HoneyNodeConnection(to, type, args = []) constructor {
@@ -256,11 +258,19 @@ function Honey(filePath = "") constructor {
 			if (array_length(args) < argumentCount)
 				throw("MORE ARGUMENTS NEEDED FOR FUNCTION CALL TO \"" + name + "\"");
 			for (var a = 0; a < argumentCount; a++) {
-				getNode(m_functions[i].m_args[a]).m_value = args[a];
+				m_functions[i].m_args[a].m_value = args[a];
 			}
 			return callNode(m_functions[i]);
 		}
 		return undefined;
+	}
+	static highlightActivity = function() {
+		var nodeCount = array_length(m_nodes);
+		for (var i = 0; i < nodeCount; i++) {
+			m_nodes[i].m_valueActivity += abs(m_nodes[i].m_value - m_nodes[i].m_lastValue);
+			m_nodes[i].m_lastValue = m_nodes[i].m_value;
+			m_nodes[i].m_activity = max(m_nodes[i].m_activity, m_nodes[i].m_valueActivity);
+		}
 	}
 	static coolActivity = function() {
 		function cool(v) {
@@ -269,6 +279,7 @@ function Honey(filePath = "") constructor {
 		var nodeCount = array_length(m_nodes);
 		for (var i = 0; i < nodeCount; i++) {
 			m_nodes[i].m_activity = cool(m_nodes[i].m_activity);
+			m_nodes[i].m_valueActivity = cool(m_nodes[i].m_valueActivity);
 			var connectionCount = array_length(m_nodes[i].m_connections);
 			for (var c = 0; c < connectionCount; c++) {
 				m_nodes[i].m_connections[c].m_activity = cool(m_nodes[i].m_connections[c].m_activity);
@@ -282,6 +293,7 @@ function Honey(filePath = "") constructor {
 		} else if (surface_get_width(m_drawSurface) != w || surface_get_height(m_drawSurface) != h) {
 			surface_resize(m_drawSurface, w, h);
 		}
+		highlightActivity();
 		surface_set_target(m_drawSurface);
 		draw_clear_alpha(c_black, 0);
 		gpu_set_blendmode(bm_add);
@@ -424,6 +436,29 @@ function Honey(filePath = "") constructor {
 		var keywordIndex = string_pos(" ", code);
 		var keyword = keywordIndex != 0 ? string_copy(code, 1, keywordIndex - 1) : code;
 		function breakDownValue(value, scope) {
+			function findScope(valueString, scopeStart, valueEnd) {
+				var result = {
+					m_start: scopeStart, 
+					m_end: scopeStart,
+					m_i: scopeStart,
+				}
+				if (string_char_at(valueString, result.m_i + 1) != "(")
+					return result;
+				
+				result.m_i++;
+				result.m_start = result.m_i;
+				var scopeDepth = 1;
+				while (result.m_i < valueEnd && scopeDepth > 0) {
+					switch (string_char_at(valueString, result.m_i + 1)) {
+						case "(": scopeDepth++; break;	
+						case ")": scopeDepth--; break;	
+					}
+					result.m_i++;
+				}
+				result.m_end = result.m_i; 
+				return result;
+			}
+			
 			function getSymbols(valueString, valueStart, valueEnd, scope) {
 				var symbols = [];
 				
@@ -446,19 +481,10 @@ function Honey(filePath = "") constructor {
 						} else if (isSymbol(char)) {
 							type = SymbolType.Symbol;
 						} else if (char == "(") {
-							var scopeStart = i + 1;
-							var scopeDepth = 1;
-							i++;
-							while (i < valueEnd && scopeDepth > 0) {
-								switch (string_char_at(valueString, i + 1)) {
-									case "(": scopeDepth++; break;	
-									case ")": scopeDepth--; break;	
-								}
-								i++;
-							}
-							var scopeEnd = i;
-							var scopeSymbols = getSymbols(valueString, scopeStart, scopeEnd, scope);
+							var scopeResult = findScope(valueString, i, valueEnd);
+							var scopeSymbols = getSymbols(valueString, scopeResult.m_start, scopeResult.m_end, scope);
 							symbols[array_length(symbols)] = scopeSymbols;
+							i = scopeResult.m_i;
 							
 							currentSymbol = "";
 						} else {
@@ -473,10 +499,12 @@ function Honey(filePath = "") constructor {
 							if (isVariable(char) || isNumber(char)) {
 								currentSymbol += char;
 							} else if (char == "(") {
-								currentSymbol = getFunctionName(currentSymbol, "");
-								symbols[array_length(symbols)] = currentSymbol;
-								currentSymbol = "@";
-								valueFound = true;
+								var scopeResult = findScope(valueString, i, valueEnd);
+								var scopeSymbols = getSymbols(valueString, scopeResult.m_start, scopeResult.m_end, scope);
+								symbols[array_length(symbols)] = array_concat([ "@", getFunctionName(currentSymbol, "") ], scopeSymbols);
+								i = scopeResult.m_i;
+								
+								currentSymbol = "";
 							} else {
 								currentSymbol = getVariableName(currentSymbol, scope);
 								valueFound = true;
@@ -742,7 +770,7 @@ function Honey(filePath = "") constructor {
 				
 				functionNode.m_args = functionArgs; 
 				for (var i = 0; i < array_length(functionNode.m_args); i++) {
-					functionNode.m_args[i] = getVariableName(functionNode.m_args [i], deriveInfo.m_scope);
+					functionNode.m_args[i] = getNode(getVariableName(functionNode.m_args[i], deriveInfo.m_scope));
 				}
 				m_functions[array_length(m_functions)] = functionNode;
 				
