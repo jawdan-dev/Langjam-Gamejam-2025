@@ -1,1 +1,1 @@
-honey.draw(x, y, 500, 500);
+honey.draw(0, 0, room_width, room_height);

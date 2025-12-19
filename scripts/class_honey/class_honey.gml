@@ -9,15 +9,14 @@ function HoneyNode(name) constructor {
 	m_name = name;
 	m_value = 0;
 	m_connections = [];
-	m_variables = [];
 }
 
 function HoneyNodeConnection(to, type, args = []) constructor {
 	m_to = to;
 	m_type = type;
 	m_args = args;
+	m_variables = [];
 }
-
 
 function Honey(filePath = "") constructor {
 	m_nodes = [];
@@ -25,10 +24,23 @@ function Honey(filePath = "") constructor {
 	m_functions = [];
 	m_anonymousCounter = 0;
 	
+	function isVariable(char) {
+		return string_pos(char, "#qwertyuiopasdfghjklzxcvbnm") > 0;
+	}
+	function isNumber(char) {
+		return string_pos(char, "1234567890") > 0;
+	}
+	function isSymbol(char) {
+		return string_pos(char, "+-/*<>=,") > 0;
+	}
+	
 	function getShortScope(scope) {
 		if (string_length(scope) <= 2) return scope;
 		if (string_char_at(scope, 2) != ".") return scope;
 		return string_copy(scope, 3, string_length(scope) - 2);
+	}
+	function isVariableName(name) {
+		return string_char_at(name, 1) == "V";
 	}
 	function getVariableName(name, scope = "") {
 		if (string_char_at(name, 1) == "#") {
@@ -36,8 +48,11 @@ function Honey(filePath = "") constructor {
 		}
 		return "V." + getShortScope(scope) + name;	
 	}
+	function isFunctionName(name) {
+		return string_char_at(name, 1) == "F"
+	}
 	function getFunctionName(name, scope = "") {
-		return "F." + getShortScope(scope) + name;	
+		return "F." + getShortScope(scope) + getShortScope(name);	
 	}
 	function getAnonymousName(scope = "") {
 		return "A." + getShortScope(scope) + string(m_anonymousCounter++);	
@@ -50,16 +65,40 @@ function Honey(filePath = "") constructor {
 		return scope + newScope + ".";	
 	}
 	
-	static getNode = function(name) {
+	static getNode = function(name, moveToBack = false) {
+		var found = undefined;
+		var foundIndex = -1;
 		if (is_struct(name) && instanceof(name) == "HoneyNode")
-			return name; 
+			found = name; 
 		
-		var nodeCount = array_length(m_nodes);
-		for (var i = 0; i < nodeCount; i++) {
-			if (m_nodes[i].m_name != name)
-				continue;
-			return m_nodes[i];
+		if (found == undefined) {
+			var nodeCount = array_length(m_nodes);
+			for (var i = 0; i < nodeCount; i++) {
+				if (m_nodes[i].m_name != name)
+					continue;
+				found = m_nodes[i];
+				foundIndex = i;
+				break;
+			}
+		} else if (moveToBack) {
+			var nodeCount = array_length(m_nodes);
+			for (var i = 0; i < nodeCount; i++) {
+				if (m_nodes[i] != found)
+					continue;
+				foundIndex = i;
+				break;
+			}
 		}
+		
+		if (found != undefined) {
+			if (moveToBack && foundIndex != -1) {
+				// AESTHETIC.
+				array_delete(m_nodes, foundIndex, 1);
+				m_nodes[array_length(m_nodes)] = found;
+			}
+			return found;
+		}
+		
 		if (name == undefined) {
 			name = getAnonymousName();
 		} else if (!is_string(name)) {
@@ -73,7 +112,26 @@ function Honey(filePath = "") constructor {
 		var fromNode = getNode(from), 
 			toNode = getNode(to);
 		
-		fromNode.m_connections[array_length(fromNode.m_connections)] = new HoneyNodeConnection(toNode, type, args);
+		var connection = new HoneyNodeConnection(toNode, type, args);
+		fromNode.m_connections[array_length(fromNode.m_connections)] = connection;
+		
+		function addVariableConnections(connection, variables) {
+			var variableCount = array_length(variables);
+			for (var i = 0; i < variableCount; i++)	{
+				if (!isVariableName(variables[i]) && !isFunctionName(variables[i])) continue;
+				connection.m_variables[array_length(connection.m_variables)] = getNode(variables[i]);
+			}
+		}
+		switch (type) {
+			case HoneyConnection.SET: {
+				addVariableConnections(connection, [ args[0] ]); 
+				addVariableConnections(connection, args[1]); 
+			} break;
+			case HoneyConnection.IF: addVariableConnections(connection, args); break;
+			case HoneyConnection.CALL: addVariableConnections(connection, args); break;
+			case HoneyConnection.RETURN: addVariableConnections(connection, args); break;
+		}
+		
 		return toNode;
 	}
 	static addVariable = function(node, variable) {		
@@ -81,27 +139,100 @@ function Honey(filePath = "") constructor {
 	}
 
 	static evaluate = function(args) {
+		if (!is_array(args)) 
+			throw("CANNOT EVALUATE NON-ARRAY \"" + string(args) + "\", THANKS");
 		
+		function evaluateHelper(args, origin) {
+			var result = {
+				m_origin: origin,
+				m_left: origin, 	
+				m_right: origin,
+				m_value: 0,
+			}
+			
+			var symbol = args[origin];
+			var firstChar = string_char_at(symbol, 1);
+			
+			if (isVariableName(symbol)) {
+				result.m_value = getNode(args[origin]).m_value;
+			} else if (isNumber(firstChar)) {
+				result.m_value = real(args[origin]);
+			} else if (isSymbol(symbol)) {
+				result.m_left = origin + 1;
+				var leftResult = evaluateHelper(args, result.m_left);
+				result.m_right = max(result.m_left + 1, leftResult.m_right + 1);
+				var rightResult = evaluateHelper(args, result.m_right);
+				
+				switch (symbol) {
+					default: throw("EVALUATION SYMBOL \"" + symbol + "\" NOT COVERED."); break;
+					case "<": result.m_value = leftResult.m_value < rightResult.m_value ? 1 : 0;
+					case "+": result.m_value = leftResult.m_value + rightResult.m_value;
+					case "-": result.m_value = leftResult.m_value - rightResult.m_value;
+					case "*": result.m_value = leftResult.m_value * rightResult.m_value;
+					case "/": result.m_value = leftResult.m_value / rightResult.m_value;
+				}
+			} else if (symbol == "@") {
+				result.m_left = origin + 1;
+				var functionName = args[result.m_left];
+				var functionNode = getNode(functionName);
+				var functionArgs = functionNode.m_args;
+				if (functionArgs == undefined) 
+					throw("COULD NOT FIND FUNCTION ARGS FOR \"" + functionName + "\"");
+				
+				var argumentCount = array_length(functionArgs) > 0 ? 1 : 0;
+				result.m_right += argumentCount * 2;
+				if (array_length(functionArgs) > 1) {
+					while (args[result.m_right] == ",")  {
+						result.m_right++;
+						argumentCount++;
+					}
+				}
+				if (argumentCount < array_length(functionArgs))
+					throw("MORE ARGUMENTS NEEDED FOR FUNCTION CALL TO \"" + functionName + "\"");
+				
+				var arguments = [];
+				for (var i = 0; i < argumentCount; i++) {
+					var rightResult = evaluateHelper(args, result.m_right);
+					arguments[i] = rightResult.m_value;
+					result.m_right = max(result.m_right + 1, rightResult.m_right + 1);
+				}
+				
+				result.m_value = call(functionName, arguments);
+			} else {
+				throw("CANNOT EVALUATE SYMBOL \"" + symbol + "\".");
+			}
+			return result;
+		}
+		return evaluateHelper(args, 0).m_value;
 	}
 	static call = function(name, args = []) {
 		function callNode(startNode) {
 			var currentNode = startNode;
 			do {
-				var connectionCount = array_length(node.m_connections);
+				var connectionCount = array_length(currentNode.m_connections);
 				for (var i = 0; i < connectionCount; i++) {
-					switch (node.m_connections[i].m_type) {
-						case HoneyConnection.SET: currentNode = node.m_connections[i].m_to; break;
-						case HoneyConnection.IF: 
-						
-							evaluate();
-							if (node.m_connections[i].m_args)
-							currentNode = node.m_connections[i].m_to; 
-							
+					var _currentNode = currentNode;
+					var connection = currentNode.m_connections[i];
+					switch (currentNode.m_connections[i].m_type) {
+						case HoneyConnection.SET: 
+							getNode(connection.m_args[0]).m_value = evaluate(connection.m_args[1]);
+							currentNode = connection.m_to; 
 						break;
-						case HoneyConnection.JUMP: currentNode = node.m_connections[i].m_to; break;
-						case HoneyConnection.CALL: break;
-						case HoneyConnection.RETURN: currentNode = node.m_connections[i].m_to; break;
+						case HoneyConnection.IF: 
+							var conditionValue = evaluate(connection.m_args);
+							if (conditionValue > 0)
+								currentNode = connection.m_to; 
+						break;
+						case HoneyConnection.JUMP: currentNode = connection.m_to; break;
+						case HoneyConnection.CALL: {
+							// cheeky call.
+							var argCopy = [];
+							array_copy(argCopy, 0, connection.m_args, 1, array_length(connection.m_args) - 1);
+							call(connection.m_args[0], argCopy); 
+						} break;
+						case HoneyConnection.RETURN: return evaluate(connection.m_args);
 					}
+					if (_currentNode != currentNode) break;
 				}
 			} until (currentNode == startNode);
 		}
@@ -109,9 +240,9 @@ function Honey(filePath = "") constructor {
 		var functionName = getFunctionName(name, "");
 		for (var i = 0; i < array_length(m_functions); i++) {
 			if (m_functions[i].m_name != functionName) continue;
-			callNode(m_functions[i]);
-			break;
+			return callNode(m_functions[i]);
 		}
+		return undefined;
 	}
 	static draw = function(x, y, w, h) {
 		var nodeCount = array_length(m_nodes);
@@ -132,8 +263,7 @@ function Honey(filePath = "") constructor {
 		for (var i = 0; i < nodeCount; i++) {
 			draw_set_color(c_white);
 					
-			var dx = cx + (sin(a * i) * size);
-			var dy = cy + (-cos(a * i) * size);
+			var dx = cx + (sin(a * i) * size), dy = cy + (-cos(a * i) * size);
 			
 			draw_circle(dx, dy, 8.0, true);
 			draw_text(dx, dy, m_nodes[i].m_name);
@@ -143,30 +273,57 @@ function Honey(filePath = "") constructor {
 				var to = m_nodes[i].m_connections[c].m_to;
 				var toIndex = getIndex(m_nodes, to);
 				
+				var tx = cx + (sin(a * toIndex) * size), ty = cy + (-cos(a * toIndex) * size);
+				var rx = (tx - dx), ry = (ty - dy);
+				
 				switch (m_nodes[i].m_connections[c].m_type) {
 					default: draw_set_color(c_white); break;
 					case HoneyConnection.IF: draw_set_color(c_orange); break;
 					case HoneyConnection.JUMP: draw_set_color(c_aqua); break;
 					case HoneyConnection.SET: draw_set_color(c_green); break;
 				}
-				
-				var tx = cx + (sin(a * toIndex) * size);
-				var ty = cy + (-cos(a * toIndex) * size);
 				draw_line(dx, dy, tx, ty);
+				//draw_circle(tx - rx * 0.1, ty - ry * 0.1, 5.0, false);
+			}
+			for (var c = 0; c < connectionCount; c++) {
+				var to = m_nodes[i].m_connections[c].m_to;
+				var toIndex = getIndex(m_nodes, to);
 				
-				var rx = (tx - dx) * 0.1;
-				var ry = (ty - dy) * 0.1;
-				draw_circle(tx - rx, ty - ry, 3.0, false);
+				var tx = cx + (sin(a * toIndex) * size), ty = cy + (-cos(a * toIndex) * size);
+				var rx = (tx - dx), ry = (ty - dy);
+				
+				draw_set_color(c_red);
+				var variableCount = array_length(m_nodes[i].m_connections[c].m_variables);
+				for (var v = 0; v < variableCount; v++) {
+					var to = m_nodes[i].m_connections[c].m_variables[v];
+					var toIndex = getIndex(m_nodes, to);
+				
+					var fx = cx + (sin(a * toIndex) * size),
+						fy = cy + (-cos(a * toIndex) * size);
+					draw_line(fx, fy, dx + (rx * 0.7), dy + (ry * 0.7));
+					draw_circle(dx + (rx * 0.7), dy + (ry * 0.7), 3.0, false);
+				}
 			}
 		}
 	}
 	
-	static parseCode = function(code, scope = "", topScope = false) {
+	static parseCode = function(code, selfInfo = {}) {
+		if (!struct_exists(selfInfo, "m_scope")) 
+			selfInfo.m_scope = "";
+		if (!struct_exists(selfInfo, "m_topScope")) 
+			selfInfo.m_topScope = true;
+		if (!struct_exists(selfInfo, "m_root")) 
+			selfInfo.m_root = undefined;
+		var deriveInfo = {};
+		deriveInfo.m_scope = selfInfo.m_scope;
+		deriveInfo.m_topScope = false;
+		deriveInfo.m_root = selfInfo.m_root;
+		
 		code = string_trim(code, [ " " ]);
 		
 		var keywordIndex = string_pos(" ", code);
 		var keyword = keywordIndex != 0 ? string_copy(code, 1, keywordIndex - 1) : code;
-				function breakDownValue(value, scope) {
+		function breakDownValue(value, scope) {
 			function getSymbols(valueString, valueStart, valueEnd, scope) {
 				var symbols = [];
 				
@@ -178,19 +335,8 @@ function Honey(filePath = "") constructor {
 				}
 				var type = SymbolType.Variable;
 				
-				function isVariable(char) {
-					return string_pos(char, "#qwertyuiopasdfghjklzxcvbnm") > 0;
-				}
-				function isNumber(char) {
-					return string_pos(char, "1234567890") > 0;
-				}
-				function isSymbol(char) {
-					return string_pos(char, "+-/*<>=") > 0;
-				}
-
 				for (var i = valueStart; i < valueEnd; i++) {
 					var char = string_char_at(valueString, i + 1);
-					
 					if (string_length(currentSymbol) <= 0) {
 						currentSymbol = char;	
 						if (isVariable(char)) {
@@ -259,6 +405,9 @@ function Honey(filePath = "") constructor {
 				}
 				
 				if (string_length(currentSymbol) > 0) {
+					if (type == SymbolType.Variable) {
+						currentSymbol = getVariableName(currentSymbol, scope)
+					}
 					symbols[array_length(symbols)] = currentSymbol;
 				}
 				
@@ -270,11 +419,7 @@ function Honey(filePath = "") constructor {
 						if (!is_string(symbol) || (!isSymbol(string_char_at(symbol, 1)) && symbol != "@")) {
 							throw(string(symbol) + " is not a functional symbol");	
 						}
-						
-						var currentIndex = array_length(sortedSymbols) - 1;
-						var temp = sortedSymbols[currentIndex];
-						sortedSymbols[currentIndex] = symbol;
-						sortedSymbols[array_length(sortedSymbols)] = temp;
+						sortedSymbols = array_concat([ symbol ], sortedSymbols);
 					} else {
 						// Somin else.
 						sortedSymbols[array_length(sortedSymbols)] = symbol;
@@ -292,15 +437,9 @@ function Honey(filePath = "") constructor {
 					}
 				}
 				
-				show_debug_message(symbols);
 				return symbols;
 			}		
 			return getSymbols(value, 0, string_length(value), scope);
-			
-			// symbols 
-			// variables
-			// values
-			// functions(...)
 		}
 		
 		function readFormat(source, formatString, scope) {			
@@ -329,14 +468,16 @@ function Honey(filePath = "") constructor {
 							}
 							
 							case "var":
+							case "func":
 							case "val":
 							case "csv":
 							case "condition": {
 								var allowedCharacters = "";
 								switch (type) {
 									case "var": allowedCharacters = "#qwertyuiopasdfghjklzxcvbnm1234567890"; break;
-									case "val": allowedCharacters = " 1234567890.#qwertyuiopasdfghjklzxcvbnm+-/*()"; break;
-									case "csv": allowedCharacters = " qwertyuiopasdfghjklzxcvbnm,"; break;
+									case "func": allowedCharacters = "qwertyuiopasdfghjklzxcvbnm1234567890"; break;
+									case "val": allowedCharacters = " 1234567890.#qwertyuiopasdfghjklzxcvbnm+-/*(),"; break;
+									case "csv": allowedCharacters = " qwertyuiopasdfghjklzxcvbnm1234567890,"; break;
 									case "condition": allowedCharacters = " 1234567890.#qwertyuiopasdfghjklzxcvbnm=<>+-/*()"; break;
 								}
 								var contentStart = sourceIndex;
@@ -355,6 +496,13 @@ function Honey(filePath = "") constructor {
 								var content = string_copy(source, contentStart + 1, contentEnd - contentStart);
 								
 								switch (type) {
+									case "var": {
+										content = getVariableName(content, scope);
+										getNode(content);
+									} break;
+									case "func": {
+										content = getFunctionName(content, scope);
+									} break;
 									case "val": {
 										content = breakDownValue(content, scope);
 									} break;
@@ -441,8 +589,8 @@ function Honey(filePath = "") constructor {
 			}
 			delete node;
 		}
-		function mergeNodes(nodes, tracking, topScope) {
-			if (topScope) return;
+		function mergeNodes(nodes, tracking, info) {
+			if (info.m_topScope) return;
 			if (tracking.m_first == undefined) return;
 			for (var i = 0; i < array_length(tracking.m_first.m_connections); i++) {
 				if (tracking.m_first.m_connections[i].m_to == tracking.m_first) {
@@ -468,10 +616,10 @@ function Honey(filePath = "") constructor {
 				var data;
 				
 				// Statement.
-				data = readFormat(code, "%var% = %val%;*", scope);
+				data = readFormat(code, "%var% = %val%;*",  selfInfo.m_scope);
 				if (data != undefined) {
-					appendNode(nodes, addConnection(getLastNode(nodes), undefined, HoneyConnection.SET, [ data[0], data[1] ]));
-					mergeNodes(nodes, parseCode(data[2], scope), topScope);
+					var node = appendNode(nodes, addConnection(getLastNode(nodes), undefined, HoneyConnection.SET, [ data[0], data[1] ]));
+					mergeNodes(nodes, parseCode(data[2], selfInfo), selfInfo);
 					break;
 				}
 				
@@ -482,32 +630,32 @@ function Honey(filePath = "") constructor {
 			case "": break;
 							
 			case "fn": {
-				var data = readFormat(code, "fn %var%(%csv%) %block%*", scope);
+				var data = readFormat(code, "fn %func%(%csv%) %block%*", selfInfo.m_scope);
 				if (data == undefined) return;
 				
-				var functionName = getFunctionName(data[0], scope),
+				var functionName = data[0],
 					functionArgs = data[1],
 					functionCode = data[2];
 				
-				var functionNode = getNode(functionName);
-				var functionScope = getScope(scope, functionName);
+				var functionNode = getNode(functionName, true);
+				deriveInfo.m_scope = getScope(deriveInfo.m_scope, functionName);
 				
 				functionNode.m_args = functionArgs; 
-				for (var i = 0; i < array_length(functionNode.m_args ); i++) {
-					functionNode.m_args[i] = getVariableName(functionNode.m_args [i], functionScope);
+				for (var i = 0; i < array_length(functionNode.m_args); i++) {
+					functionNode.m_args[i] = getVariableName(functionNode.m_args [i], deriveInfo.m_scope);
 				}
 				m_functions[array_length(m_functions)] = functionNode;
 				
 				appendNode(nodes, functionNode);
-				mergeNodes(nodes, parseCode(functionCode, functionScope), false);
+				mergeNodes(nodes, parseCode(functionCode, deriveInfo), deriveInfo);
 				if (nodes.m_last != functionNode)
 					addConnection(nodes.m_last, functionNode, HoneyConnection.JUMP);	
-
-				mergeNodes(nodes, parseCode(data[3], scope, topScope), topScope);
+				
+				mergeNodes(nodes, parseCode(data[3], selfInfo), selfInfo);
 			} break;
 			
 			case "if": {
-				var data = readFormat(code, "if (%condition%) %block%*", scope);
+				var data = readFormat(code, "if (%condition%) %block%*", selfInfo.m_scope);
 				if (data == undefined) return;
 
 				var ifCondition = data[0],
@@ -515,14 +663,14 @@ function Honey(filePath = "") constructor {
 					nextCode = data[2];
 
 				var rootNode = getLastNode(nodes);
-				var codeNodes = parseCode(ifCode, scope);				
-				addConnection(rootNode, codeNodes.m_first, HoneyConnection.IF, [ ifCondition ]);
+				var codeNodes = parseCode(ifCode, deriveInfo);				
+				addConnection(rootNode, codeNodes.m_first, HoneyConnection.IF, ifCondition);
 				appendNode(nodes, codeNodes.m_last);
 				
 				var jumps = [ rootNode ]; 
 				var ends = [ codeNodes.m_last ]; 
 				while (string_length(nextCode) > 0) {
-					var next = parseCode(nextCode, scope, topScope);
+					var next = parseCode(nextCode, selfInfo);
 					switch (next.m_keyword) {
 						default: {
 							for (var i = 0; i < array_length(jumps); i++)
@@ -537,13 +685,13 @@ function Honey(filePath = "") constructor {
 							nextCode = ""; 
 						} break;
 						case "elif": {
-							var block = parseCode(next.m_ifCode, scope);
-							appendNode(addConnection(rootNode, block.m_first, HoneyConnection.IF, [ next.m_ifCondition ]));
+							var block = parseCode(next.m_ifCode, deriveInfo);
+							appendNode(addConnection(rootNode, block.m_first, HoneyConnection.IF, next.m_ifCondition));
 							nextCode = next.m_nextCode;
 							ends[array_length(ends)] = block.m_last;
 						} break;
 						case "else": {
-							var block = parseCode(next.m_ifCode, scope);
+							var block = parseCode(next.m_ifCode, deriveInfo);
 							appendNode(nodes, addConnection(rootNode, block.m_first, HoneyConnection.JUMP));
 							nextCode = next.m_nextCode;
 							jumps = [];
@@ -553,7 +701,7 @@ function Honey(filePath = "") constructor {
 				}
 			} break;
 			case "elif": {
-				var data = readFormat(code, "elif (%condition%) %block%*", scope);
+				var data = readFormat(code, "elif (%condition%) %block%*", selfInfo.m_scope);
 				if (data == undefined) return;
 
 				var ifCondition = data[0],
@@ -568,7 +716,7 @@ function Honey(filePath = "") constructor {
 				};
 			}
 			case "else": {
-				var data = readFormat(code, "else %block%*", scope);
+				var data = readFormat(code, "else %block%*", selfInfo.m_scope);
 				if (data == undefined) return;
 
 				var ifCode = data[0],
@@ -582,28 +730,28 @@ function Honey(filePath = "") constructor {
 			}
 			
 			case "for":{
-				var data = readFormat(code, "for %var%(%val%, %val%) %block%*", scope);
+				var data = readFormat(code, "for %var%(%val%; %val%) %block%*", selfInfo.m_scope);
 				if (data == undefined) return;
 
-				var forVar = getScope(data[0], getLastNode(nodes).m_name),
+				var forVar = data[0],
 					forFrom = data[1],
 					forTo = data[2],
 					forCode = data[3];
 				
 				// TODO: Polarity.
-				var forNode = appendNode(nodes, addConnection(getLastNode(nodes), undefined, HoneyConnection.SET, array_concat([ forVar ], forFrom)));
+				var forNode = appendNode(nodes, addConnection(getLastNode(nodes), undefined, HoneyConnection.SET, [ forVar, forFrom ]));
 				appendNode(nodes, addConnection(forNode, undefined, HoneyConnection.IF, array_concat([ "<", forVar ], forTo)));
-				mergeNodes(nodes, parseCode(forCode, scope), false);
-				appendNode(nodes, addConnection(getLastNode(nodes), undefined, HoneyConnection.SET, [ forVar, forVar + " + 1" ]));
+				mergeNodes(nodes, parseCode(forCode, deriveInfo), deriveInfo);
+				appendNode(nodes, addConnection(getLastNode(nodes), undefined, HoneyConnection.SET, [ forVar, [ "+", forVar, "1" ]]));
 				addConnection(getLastNode(nodes), forNode, HoneyConnection.JUMP);
 				nodes.m_last = forNode;
-				mergeNodes(nodes, parseCode(data[4], scope, topScope), topScope);
+				mergeNodes(nodes, parseCode(data[4], selfInfo), selfInfo);
 			} break;
 			
 			case "return":{
-				var data = readFormat(code, "return %val%;*", scope);
+				var data = readFormat(code, "return %val%;*", selfInfo.m_scope);
 				if (data == undefined) return;
-				appendNode(nodes, addConnection(getLastNode(nodes), getLastNode(nodes), HoneyConnection.RETURN, [ data[0] ]));
+				appendNode(nodes, addConnection(getLastNode(nodes), getLastNode(nodes), HoneyConnection.RETURN, data[0]));
 			} break;
 		}
 		
@@ -622,7 +770,7 @@ function Honey(filePath = "") constructor {
 	fileContents = string_replace_all(fileContents, "\r", "");
 	fileContents = string_replace_all(fileContents, "\t", "");
 	fileContents = string_replace_all(fileContents, "  ", " ");
-	parseCode(fileContents, "", true);
+	parseCode(fileContents);
 	
 	file_text_close(file);
 }
