@@ -38,6 +38,7 @@
   "resources": [
     {"id":{"name":"test","path":"objects/test/test.yy",},},
     {"id":{"name":"rm_test","path":"rooms/rm_test/rm_test.yy",},},
+    {"id":{"name":"font_maki","path":"fonts/font_maki/font_maki.yy",},},
     {"id":{"name":"sprite_noise","path":"sprites/sprite_noise/sprite_noise.yy",},},
     {"id":{"name":"shader_honey","path":"shaders/shader_honey/shader_honey.yy",},},
     {"id":{"name":"sprite_honey","path":"sprites/sprite_honey/sprite_honey.yy",},},

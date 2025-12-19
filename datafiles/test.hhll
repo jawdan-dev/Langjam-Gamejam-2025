@@ -6,14 +6,27 @@ fn update() {
 	else
 		variable1 = test(3);
 
-	for i(0; variable1) {
+	for i(0|variable1) {
 		variable2 = variable2 * 2;
 	}
 	testvar = 4;
+
+	drawtest();
 }
 
-fn test(arg)
+fn test(arg) {
 	return (arg * 2) + 1;
+}
+
+fn drawtest() {
+	x = x + 1;
+	if (x > 100) {
+		x = 0;
+	}
+	draw line(50|x|50|150 + x);
+	draw rect(x|0|100|100);
+	draw text(x|150|test thing WHAT);
+}
 
 fn activitytest() {
 	if (0) {

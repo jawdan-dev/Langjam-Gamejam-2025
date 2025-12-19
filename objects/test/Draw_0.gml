@@ -1,3 +1,6 @@
+honey.draw(0, 0, room_width, room_height);
+
+
 if (keyboard_check_pressed(ord("E"))) {
 	honey.call("activitytest");	
 }
@@ -12,4 +15,3 @@ if (tests > 0) {
 	}
 	honey.call("update");
 }
-honey.draw(0, 0, room_width, room_height);
