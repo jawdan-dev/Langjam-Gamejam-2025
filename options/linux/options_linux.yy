@@ -1,5 +1,6 @@
 {
-  "%Name": "Linux",
+  "resourceType": "GMLinuxOptions",
+  "resourceVersion": "1.0",
   "name": "Linux",
   "option_linux_allow_fullscreen": false,
   "option_linux_disable_sandbox": false,
@@ -20,6 +21,4 @@
   "option_linux_sync": false,
   "option_linux_texture_page": "2048x2048",
   "option_linux_version": "1.0.0.0",
-  "resourceType": "GMLinuxOptions",
-  "resourceVersion": "1.0",
 }

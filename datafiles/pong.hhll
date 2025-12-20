@@ -2,10 +2,18 @@ input_w;
 input_s;
 input_i;
 input_k;
+input_mouse_x;
+input_mouse_y;
+input_mouse_left;
+input_mouse_left_up;
 
 delta;
 screen_size_x;
 screen_size_y;
+
+game_started = 0;
+game_startButtonWidth = 320;
+game_startButtonHeight = 120;
 
 ball_enabled = 0;
 ball_directionX = 0.55;
@@ -30,13 +38,24 @@ score_left = 0;
 score_right = 0;
 
 func start() {
-	ball_spawn();
+	paddle_left_position_y = screen_size_y - paddle_height - 10.0;
+	paddle_right_position_y = screen_size_y - paddle_height - 10.0;
 }
 
 func update() {
+	start_process();
 	paddle_process();
 	ball_process();
 	score_display();
+}
+
+func test_point_aabb(x1, y1, x2, y2, w2, h2) {
+	return (
+		(x1 <= (x2 + w2)) +
+		(x1 >= x2) +
+		(y1 <= (y2 + h2)) +
+		(y1 >= y2)
+	) = 4;
 }
 
 func test_aabb_aabb(x1, y1, w1, h1, x2, y2, w2, h2) {
@@ -48,37 +67,81 @@ func test_aabb_aabb(x1, y1, w1, h1, x2, y2, w2, h2) {
 	) = 4;
 }
 
+func start_process() {
+	if (game_started) return 0;
+
+	bx = (screen_size_x - game_startButtonWidth) / 2;
+	by = (screen_size_y - game_startButtonHeight) / 2;
+	start_button(bx, by, game_startButtonWidth, game_startButtonHeight);
+	draw text(screen_size_x / 2|40|Hot Honey Loop - PONG);
+	draw text(screen_size_x / 2|screen_size_y - 80|Controls:);
+	draw text(screen_size_x / 2|screen_size_y - 50|<- WS                                                                                        IK ->);
+}
+
+func start_button(x, y, w, h) {
+	hover = test_point_aabb(input_mouse_x, input_mouse_y, x, y, w, h);
+	active = (hover + input_mouse_left) = 2;
+	if (active) {
+		draw rect(x|y|w|h);
+	} elif (hover) {
+		draw rect(x|y|w|5);
+		draw rect(x|y+h-5|w|5);
+		draw rect(x|y|5|h);
+		draw rect(x+w-5|y|5|h);
+	} else {
+		draw rect(x|y|w|2);
+		draw rect(x|y+h-2|w|2);
+		draw rect(x|y|2|h);
+		draw rect(x+w-2|y|2|h);
+	}
+	draw text(x+(w/2)|y+(h/2)|Click To Start!);
+
+	if ((hover + input_mouse_left_up) = 2) {
+		game_started = 1;
+		ball_spawn();
+	}
+	return 0;
+}
+
 func paddle_process() {
 	paddle_left_position_y = paddle_left_position_y + (input_s - input_w * paddle_speed * delta);
-	if ((ball_directionX < 0.0) + test_aabb_aabb(
-		(ball_positionX + ball_velocityX), (ball_positionY + ball_velocityY),
-		ball_sizeX, ball_sizeY,
-		paddle_offset, paddle_left_position_y,
-		paddle_width, paddle_height
-	) = 2) {
-		ball_bounce(1, 0);
-	}
 	if (paddle_left_position_y < 0.0) {
 		paddle_left_position_y = 0.0;
 	} elif (paddle_left_position_y + paddle_height > screen_size_y) {
 		paddle_left_position_y = screen_size_y - paddle_height;
 	}
-	draw rect(paddle_offset|paddle_left_position_y|paddle_width|paddle_height);
 
 	paddle_right_position_y = paddle_right_position_y + (input_k - input_i * paddle_speed * delta);
-	if ((ball_directionX > 0.0) + test_aabb_aabb(
-		(ball_positionX + ball_velocityX), (ball_positionY + ball_velocityY),
-		ball_sizeX, ball_sizeY,
-		(screen_size_x - paddle_offset - paddle_width), paddle_right_position_y,
-		paddle_width, paddle_height
-	) = 2) {
-		ball_bounce(1, 0);
-	}
 	if (paddle_right_position_y < 0.0) {
 		paddle_right_position_y = 0.0;
 	} elif (paddle_right_position_y + paddle_height > screen_size_y) {
 		paddle_right_position_y = screen_size_y - paddle_height;
 	}
+
+	if (ball_enabled) {
+		if_bug_fix = 1;
+		if ((ball_directionX < 0.0) + test_aabb_aabb(
+			(ball_positionX + ball_velocityX), (ball_positionY + ball_velocityY),
+			ball_sizeX, ball_sizeY,
+			paddle_offset, paddle_left_position_y,
+			paddle_width, paddle_height
+		) = 2) {
+			ball_bounce(1, 0);
+		}
+		if_bug_fix = 1;
+
+		if ((ball_directionX > 0.0) + test_aabb_aabb(
+			(ball_positionX + ball_velocityX), (ball_positionY + ball_velocityY),
+			ball_sizeX, ball_sizeY,
+			(screen_size_x - paddle_offset - paddle_width), paddle_right_position_y,
+			paddle_width, paddle_height
+		) = 2) {
+			ball_bounce(1, 0);
+		}
+		if_bug_fix = 1;
+	}
+
+	draw rect(paddle_offset|paddle_left_position_y|paddle_width|paddle_height);
 	draw rect(screen_size_x - (paddle_offset + paddle_width)|paddle_right_position_y|paddle_width|paddle_height);
 }
 
@@ -119,9 +182,7 @@ func ball_normalizeDirection() {
 	ball_velocityY = ball_directionY * ball_speed * delta;
 }
 func ball_process() {
-	if (ball_enabled = 0) {
-		return 0;
-	}
+	if (ball_enabled = 0) return 0;
 
 	if (((ball_positionX + ball_velocityX < 0.0) + (ball_velocityX < 0.0) = 2) + ((ball_positionX + ball_sizeX + ball_velocityX > screen_size_x) + (ball_velocityX > 0.0) = 2)) {
 		ball_hitEnd();
@@ -146,6 +207,8 @@ func score_add(left, right) {
 	score_right = score_right + right;
 }
 func score_display() {
+	if (game_started = 0) return 0;
+
 	draw textval(score_offset|screen_size_y * 0.5|score_left);
 	draw textval(screen_size_x - score_offset|screen_size_y * 0.5|score_right);
 }

@@ -184,6 +184,13 @@ function Honey(filePath = "") constructor {
 	static addVariable = function(node, variable) {		
 		node.m_variables[array_length(node.m_variables)] = getNode(variable);
 	}
+
+	function safeSetValue(name, value) {
+		var node = findNode(getVariableName(name));
+		if (node == undefined) return;
+		node.m_value = value;
+	}
+	
 	static evaluate = function(args) {
 		if (!is_array(args)) 
 			throw("CANNOT EVALUATE NON-ARRAY \"" + string(args) + "\", THANKS");
@@ -381,17 +388,18 @@ function Honey(filePath = "") constructor {
 		draw_clear_alpha(c_black, 0);
 	
 		#macro DRAW_DEBUG (keyboard_check(vk_tab))
-		#macro DRAW_SCALE 0.65
+		#macro DRAW_SCALE 0.45
 		#macro DRAW_SIZE 300.0
 		#macro DRAW_BORDER 30.0
-		#macro DRAW_ACTIVITY_SCALE 1.0
+		#macro DRAW_ACTIVITY_SCALE 0.4
+		#macro DRAW_ACTIVITY_MIN 0.1
 
 		if (!DRAW_DEBUG) {
 			gpu_set_blendmode(bm_add);
 		}
 	
 		if (!variable_instance_exists(self, "m_drawMax"))
-			m_drawMax = 30;
+			m_drawMax = 80;
 		if (keyboard_check(vk_add)) m_drawMax += 0.01666 * 0.2 * m_drawMax;
 		if (keyboard_check(vk_subtract)) m_drawMax -= 0.01666 * 0.2 * m_drawMax;
 		m_drawMax = clamp(m_drawMax, 0.34567, array_length(m_nodes));
@@ -407,7 +415,7 @@ function Honey(filePath = "") constructor {
 		}
 	
 		function activityFunc(v) {
-			return 1.0 - power(DRAW_ACTIVITY_SCALE / (v + DRAW_ACTIVITY_SCALE + 0.15), 1.0);
+			return 1.0 - power(DRAW_ACTIVITY_SCALE / (v + DRAW_ACTIVITY_SCALE + DRAW_ACTIVITY_MIN), 1.0);
 		}
 		function drawText(tx, ty, text, size, scale, color = c_white) {
 			if (DRAW_DEBUG) {
@@ -674,7 +682,6 @@ function Honey(filePath = "") constructor {
 					}
 				}
 				
-				show_debug_message(sortedSymbols);
 				symbols = []; // Expanded symbols.
 				for (var i = 0; i < array_length(sortedSymbols); i++) {
 					var symbol = sortedSymbols[i];
@@ -686,11 +693,12 @@ function Honey(filePath = "") constructor {
 						symbols[array_length(symbols)] = symbol[j];
 					}
 				}
-				show_debug_message(" > " + string(symbols));
 				
 				return symbols;
 			}		
-			return getSymbols(value, 0, string_length(value), scope);
+			var symbols = getSymbols(value, 0, string_length(value), scope);
+			show_debug_message(symbols);
+			return symbols;
 		}
 		
 		function readFormat(source, formatString, scope) {			
@@ -731,7 +739,7 @@ function Honey(filePath = "") constructor {
 									case "val": allowedCharacters = " 1234567890.#qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_<>+-/*(),=~"; break;
 									case "csv": allowedCharacters = " qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_1234567890,"; break;
 									case "condition": allowedCharacters = " 1234567890.#qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_=<>+-/*()~"; break;
-									case "text": allowedCharacters = " qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_1234567890.=<>+-/*()"; break;
+									case "text": allowedCharacters = " qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_1234567890.:=<>+-/*!"; break;
 								}
 								var contentStart = sourceIndex;
 								var contentDepth = 1;
