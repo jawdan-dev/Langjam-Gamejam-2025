@@ -36,8 +36,8 @@
     "IDEVersion": "2023.11.1.129",
   },
   "resources": [
-    {"id":{"name":"test","path":"objects/test/test.yy",},},
-    {"id":{"name":"rm_test","path":"rooms/rm_test/rm_test.yy",},},
+    {"id":{"name":"obj_game","path":"objects/obj_game/obj_game.yy",},},
+    {"id":{"name":"room_game","path":"rooms/room_game/room_game.yy",},},
     {"id":{"name":"font_maki","path":"fonts/font_maki/font_maki.yy",},},
     {"id":{"name":"sprite_noise","path":"sprites/sprite_noise/sprite_noise.yy",},},
     {"id":{"name":"shader_honey","path":"shaders/shader_honey/shader_honey.yy",},},
@@ -45,7 +45,7 @@
     {"id":{"name":"class_honey","path":"scripts/class_honey/class_honey.yy",},},
   ],
   "RoomOrderNodes": [
-    {"roomId":{"name":"rm_test","path":"rooms/rm_test/rm_test.yy",},},
+    {"roomId":{"name":"room_game","path":"rooms/room_game/room_game.yy",},},
   ],
   "templateType": "game",
   "TextureGroups": [

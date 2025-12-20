@@ -7,6 +7,7 @@ delta;
 screen_size_x;
 screen_size_y;
 
+ball_enabled = 0;
 ball_directionX = 0.55;
 ball_directionY = 0.35;
 ball_speed = 600.0;
@@ -14,23 +15,28 @@ ball_positionX = 0.0;
 ball_positionY = 0.0;
 ball_sizeX = 10.0;
 ball_sizeY = 10.0;
+ball_velocityX;
+ball_velocityY;
 
 paddle_offset = 50.0;
-paddle_speed = 400.0;
+paddle_speed = 700.0;
 paddle_width = 25.0;
 paddle_height = 100.0;
 paddle_left_position_y = 10.0;
 paddle_right_position_y = 10.0;
 
+score_offset = 150;
+score_left = 0;
+score_right = 0;
+
 func start() {
-	len = ~sqrt((ball_directionX * ball_directionX) + (ball_directionY * ball_directionY));
-	ball_directionX = ball_directionX / len;
-	ball_directionY = ball_directionY / len;
+	ball_spawn();
 }
 
 func update() {
 	paddle_process();
 	ball_process();
+	score_display();
 }
 
 func test_aabb_aabb(x1, y1, w1, h1, x2, y2, w2, h2) {
@@ -43,34 +49,30 @@ func test_aabb_aabb(x1, y1, w1, h1, x2, y2, w2, h2) {
 }
 
 func paddle_process() {
-	velocityX = ball_directionX * ball_speed * delta;
-	velocityY = ball_directionY * ball_speed * delta;
-
 	paddle_left_position_y = paddle_left_position_y + (input_s - input_w * paddle_speed * delta);
 	if ((ball_directionX < 0.0) + test_aabb_aabb(
-		(ball_positionX + velocityX), (ball_positionY + velocityY),
+		(ball_positionX + ball_velocityX), (ball_positionY + ball_velocityY),
 		ball_sizeX, ball_sizeY,
 		paddle_offset, paddle_left_position_y,
 		paddle_width, paddle_height
 	) = 2) {
-		ball_directionX = 0.0 - ball_directionX;
+		ball_bounce(1, 0);
 	}
 	if (paddle_left_position_y < 0.0) {
 		paddle_left_position_y = 0.0;
 	} elif (paddle_left_position_y + paddle_height > screen_size_y) {
 		paddle_left_position_y = screen_size_y - paddle_height;
 	}
-
 	draw rect(paddle_offset|paddle_left_position_y|paddle_width|paddle_height);
 
 	paddle_right_position_y = paddle_right_position_y + (input_k - input_i * paddle_speed * delta);
 	if ((ball_directionX > 0.0) + test_aabb_aabb(
-		(ball_positionX + velocityX), (ball_positionY + velocityY),
+		(ball_positionX + ball_velocityX), (ball_positionY + ball_velocityY),
 		ball_sizeX, ball_sizeY,
 		(screen_size_x - paddle_offset - paddle_width), paddle_right_position_y,
 		paddle_width, paddle_height
 	) = 2) {
-		ball_directionX = 0.0 - ball_directionX;
+		ball_bounce(1, 0);
 	}
 	if (paddle_right_position_y < 0.0) {
 		paddle_right_position_y = 0.0;
@@ -80,21 +82,70 @@ func paddle_process() {
 	draw rect(screen_size_x - (paddle_offset + paddle_width)|paddle_right_position_y|paddle_width|paddle_height);
 }
 
+func ball_spawn() {
+	ball_positionX = (screen_size_x + ball_sizeX) / 2;
+	ball_positionY = (screen_size_y + ball_sizeY) / 2;
+
+	ball_directionX = ~random(10) - 5.0;
+	ball_directionY = ~random(5.0) - 2.5;
+
+	ball_positionX = ball_positionX - (ball_directionX * 150.0);
+	ball_positionY = ball_positionY - (ball_directionY * 150.0);
+
+	ball_normalizeDirection();
+	ball_enabled = 1;
+}
+func ball_bounce(xFlip, yFlip) {
+	if (xFlip) { ball_directionX = 0.0 - ball_directionX; }
+	if (yFlip) { ball_directionY = 0.0 - ball_directionY; }
+	ball_bumpDirection();
+}
+func ball_bumpDirection() {
+	ball_directionY = ball_directionY + (~random(2.0) - 1.0) * 0.1;
+	ball_normalizeDirection();
+}
+func ball_normalizeDirection() {
+	if (~abs(ball_directionX) < ~abs(ball_directionY)) {
+		ball_directionX = ~sign(ball_directionX) * ~abs(ball_directionY);
+	} elif (~abs(ball_directionY) < ~abs(ball_directionX) * 0.5) {
+		ball_directionY = ~sign(ball_directionY) * ~abs(ball_directionX) * 0.5;
+	}
+
+	len = ~sqrt((ball_directionX * ball_directionX) + (ball_directionY * ball_directionY));
+	ball_directionX = ball_directionX / len;
+	ball_directionY = ball_directionY / len;
+
+	ball_velocityX = ball_directionX * ball_speed * delta;
+	ball_velocityY = ball_directionY * ball_speed * delta;
+}
 func ball_process() {
-	velocityX = ball_directionX * ball_speed * delta;
-	velocityY = ball_directionY * ball_speed * delta;
-
-	if (((ball_positionX + velocityX < 0.0) + (velocityX < 0.0) = 2) + ((ball_positionX + ball_sizeX + velocityX > screen_size_x) + (velocityX > 0.0) = 2)) {
-		ball_directionX = 0.0 - ball_directionX;
-	velocityX = ball_directionX * ball_speed * delta;
-	}
-	if (((ball_positionY + velocityY < 0.0) + (velocityY < 0.0) = 2) + ((ball_positionY + ball_sizeY + velocityY > screen_size_y) + (velocityY > 0.0) = 2)) {
-		ball_directionY = 0.0 - ball_directionY;
-		velocityY = ball_directionY * ball_speed * delta;
+	if (ball_enabled = 0) {
+		return 0;
 	}
 
-	ball_positionX = ball_positionX + velocityX;
-	ball_positionY = ball_positionY + velocityY;
+	if (((ball_positionX + ball_velocityX < 0.0) + (ball_velocityX < 0.0) = 2) + ((ball_positionX + ball_sizeX + ball_velocityX > screen_size_x) + (ball_velocityX > 0.0) = 2)) {
+		ball_hitEnd();
+	}
+	if (((ball_positionY + ball_velocityY < 0.0) + (ball_velocityY < 0.0) = 2) + ((ball_positionY + ball_sizeY + ball_velocityY > screen_size_y) + (ball_velocityY > 0.0) = 2)) {
+		ball_bounce(0, 1);
+	}
+
+	ball_positionX = ball_positionX + ball_velocityX;
+	ball_positionY = ball_positionY + ball_velocityY;
 
 	draw rect(ball_positionX|ball_positionY|ball_sizeX|ball_sizeY);
+}
+func ball_hitEnd() {
+	ball_enabled = 0;
+	ball_spawn();
+	score_add((ball_velocityX > 0.0), (ball_velocityX < 0.0));
+}
+
+func score_add(left, right) {
+	score_left = score_left + left;
+	score_right = score_right + right;
+}
+func score_display() {
+	draw textval(score_offset|screen_size_y * 0.5|score_left);
+	draw textval(screen_size_x - score_offset|screen_size_y * 0.5|score_right);
 }

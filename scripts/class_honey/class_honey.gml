@@ -218,6 +218,11 @@ function Honey(filePath = "") constructor {
 					default: throw("IN-BUILT FUNCTION \"" + symbol + "\" NOT KNOWN."); break;
 					
 					case "sqrt": result.m_value = sqrt(rightResult.m_value); break;
+					case "random": result.m_value = random(rightResult.m_value); break;
+					case "sin": result.m_value = sin(rightResult.m_value); break;
+					case "cos": result.m_value = cos(rightResult.m_value); break;
+					case "abs": result.m_value = abs(rightResult.m_value); break;
+					case "sign": result.m_value = sign(rightResult.m_value); break;
 				}
 			} else if (isSymbol(firstChar)) {
 				result.m_left = origin + 1;
@@ -300,8 +305,9 @@ function Honey(filePath = "") constructor {
 							evaluate(connection.m_args);
 							currentNode = connection.m_to;
 						} break;
-						case HoneyConnection.RETURN: return evaluate(connection.m_args);
-						
+						case HoneyConnection.RETURN: {
+							return evaluate(connection.m_args);
+						}
 						case HoneyConnection.DRAW: {
 							currentNode = connection.m_to; 
 							var a = connection.m_args;
@@ -342,11 +348,11 @@ function Honey(filePath = "") constructor {
 		var nodeCount = array_length(m_nodes);
 		for (var i = 0; i < nodeCount; i++) {
 			if (m_nodes[i].m_value == undefined) continue;
-			if (m_nodes[i].m_activity > 0) m_nodes[i].m_totalActivity += 0.01666 * 0.2;
-			m_nodes[i].m_totalActivity += abs(m_nodes[i].m_activity - m_nodes[i].m_lastActivity) * 0.01666;
+			if (m_nodes[i].m_activity > 0) m_nodes[i].m_totalActivity += 0.01666 * 0.5;
+			m_nodes[i].m_totalActivity += abs(m_nodes[i].m_activity - m_nodes[i].m_lastActivity) * 0.01666 * 2.0;
 			m_nodes[i].m_lastActivity = m_nodes[i].m_activity;
 			m_nodes[i].m_activity = 0.0;
-			m_nodes[i].m_totalActivity += abs(m_nodes[i].m_value - m_nodes[i].m_lastValue) * 0.01666;
+			m_nodes[i].m_totalActivity += power(abs(m_nodes[i].m_value - m_nodes[i].m_lastValue), 0.5) * 0.01666 * 4.0;
 			m_nodes[i].m_lastValue = m_nodes[i].m_value;
 		}
 	}
@@ -375,17 +381,33 @@ function Honey(filePath = "") constructor {
 		draw_clear_alpha(c_black, 0);
 	
 		#macro DRAW_DEBUG (keyboard_check(vk_tab))
-		#macro DRAW_SCALE 0.15
+		#macro DRAW_SCALE 0.65
 		#macro DRAW_SIZE 300.0
 		#macro DRAW_BORDER 30.0
-		#macro DRAW_ACTIVITY_SCALE 2.0
-		
+		#macro DRAW_ACTIVITY_SCALE 1.0
+
 		if (!DRAW_DEBUG) {
 			gpu_set_blendmode(bm_add);
 		}
 	
+		if (!variable_instance_exists(self, "m_drawMax"))
+			m_drawMax = 30;
+		if (keyboard_check(vk_add)) m_drawMax += 0.01666 * 0.2 * m_drawMax;
+		if (keyboard_check(vk_subtract)) m_drawMax -= 0.01666 * 0.2 * m_drawMax;
+		m_drawMax = clamp(m_drawMax, 0.34567, array_length(m_nodes));
+			
+		function getDrawPosition(index, c) {
+			var a = (pi * 2.0) / min(c.m_nodeCount, c.m_max);
+			var inset = ((max(index + 1 - (c.m_max - 20), 0) / c.m_nodeCount) * c.m_size * 0.8);
+			var s = c.m_size - inset;
+			return {
+				x: c.x + sin(a * index) * s,
+				y: c.y + -cos(a * index) * s
+			};
+		}
+	
 		function activityFunc(v) {
-			return 1.0 - power(1.0 - clamp((v / DRAW_ACTIVITY_SCALE), 0.01, 1.0), 10.0);
+			return 1.0 - power(DRAW_ACTIVITY_SCALE / (v + DRAW_ACTIVITY_SCALE + 0.15), 1.0);
 		}
 		function drawText(tx, ty, text, size, scale, color = c_white) {
 			if (DRAW_DEBUG) {
@@ -417,10 +439,9 @@ function Honey(filePath = "") constructor {
 		}
 	
 		var nodeCount = array_length(m_nodes);
-		var cx = 0 + (w * 0.5);
-		var cy = 0 + (h * 0.5);
-		var size = (min(w, h) * 0.5) - DRAW_BORDER;
 		var scale = 32.0 / nodeCount;
+		var size = (min(w, h) * 0.5) - DRAW_BORDER;
+		var drawInfo = { x: 0 + (w * 0.5), y: 0 + (h * 0.5), m_nodeCount: nodeCount, m_size: size, m_max: m_drawMax };
 		
 		function getIndex(nodes, node) {
 			var nodeCount = array_length(nodes);
@@ -430,31 +451,19 @@ function Honey(filePath = "") constructor {
 			return -1;
 		}
 		
-		var a = (pi * 2.0) / nodeCount;
 		for (var i = 0; i < nodeCount; i++) {
-			draw_set_color(c_white);
-					
-			var dx = cx + (sin(a * i) * size), dy = cy + (-cos(a * i) * size);
+			var d = getDrawPosition(i, drawInfo);
 			
 			var activity = m_nodes[i].m_totalActivity;
-			drawCircle(dx, dy, 8.0, scale, activity);
-			
-			if (isVariableName(m_nodes[i].m_name) || isFunctionName(m_nodes[i].m_name)) {
-				var textOffsetX = (sign(sin(a * i)) * size * 0.3);
-				var textOffsetY = (-(cos(a * i)) * size * 0.025);
-				drawText(dx + textOffsetX, dy + textOffsetY - 5, m_nodes[i].m_name, 0.8, scale);
-				if (DRAW_DEBUG) {
-					drawLine(dx + textOffsetX, dy + textOffsetY, dx, dy, 2, scale, activity);
-				}
-			}
+			drawCircle(d.x, d.y, 8.0, scale, activity);
 			
 			var connectionCount = array_length(m_nodes[i].m_connections);
 			for (var c = 0; c < connectionCount; c++) {
 				var to = m_nodes[i].m_connections[c].m_to;
 				var toIndex = getIndex(m_nodes, to);
 				
-				var tx = cx + (sin(a * toIndex) * size), ty = cy + (-cos(a * toIndex) * size);
-				var rx = (tx - dx), ry = (ty - dy);
+				var t = getDrawPosition(toIndex, drawInfo);
+				var rx = (t.x - d.x), ry = (t.y - d.y);
 				
 				var color = c_white;
 				switch (m_nodes[i].m_connections[c].m_type) {
@@ -463,27 +472,32 @@ function Honey(filePath = "") constructor {
 					case HoneyConnection.JUMP: color = c_teal; break;
 					case HoneyConnection.CALL: color = c_purple; break;
 				}
-				drawLine(dx, dy, tx, ty, 3.0, scale, m_nodes[i].m_connections[c].m_activity * activity, color);
-				drawCircle(tx - rx * 0.1, ty - ry * 0.1, 5.0, scale, m_nodes[i].m_connections[c].m_activity * activity, color);
+				drawLine(d.x, d.y, t.x, t.y, 3.0, scale, m_nodes[i].m_connections[c].m_activity * activity, color);
+				drawCircle(t.x - rx * 0.1, t.y - ry * 0.1, 5.0, scale, m_nodes[i].m_connections[c].m_activity * activity, color);
 			}
 			for (var c = 0; c < connectionCount; c++) {
 				var to = m_nodes[i].m_connections[c].m_to;
 				var toIndex = getIndex(m_nodes, to);
 				
-				var tx = cx + (sin(a * toIndex) * size), ty = cy + (-cos(a * toIndex) * size);
-				var rx = (tx - dx), ry = (ty - dy);
+				var t = getDrawPosition(toIndex, drawInfo);
+				var rx = (t.x - d.x), ry = (t.y - d.y);
 				
 				var variableCount = array_length(m_nodes[i].m_connections[c].m_variables);
 				for (var v = 0; v < variableCount; v++) {
 					var to = m_nodes[i].m_connections[c].m_variables[v];
 					var toIndex = getIndex(m_nodes, to);
 				
-					var fx = cx + (sin(a * toIndex) * size),
-						fy = cy + (-cos(a * toIndex) * size);
-					drawLine(fx, fy, dx + (rx * 0.7), dy + (ry * 0.7), 1.5, scale, m_nodes[i].m_connections[c].m_activity * activity, c_red);
-					drawCircle(dx + (rx * 0.7), dy + (ry * 0.7), 3.0, scale, m_nodes[i].m_connections[c].m_activity * activity, c_red);
+					var f = getDrawPosition(toIndex, drawInfo);
+					drawLine(f.x, f.y, d.x + (rx * 0.7), d.y + (ry * 0.7), 1.5, scale, m_nodes[i].m_connections[c].m_activity * activity, c_red);
+					drawCircle(d.x + (rx * 0.7), d.y + (ry * 0.7), 3.0, scale, m_nodes[i].m_connections[c].m_activity * activity, c_red);
 				}
 			}
+		}
+		for (var i = 0; i < nodeCount; i++) {
+			var d = getDrawPosition(i, drawInfo);
+			var mx = d.x - mouse_x, my = d.y - mouse_y;
+			var dist = sqrt((mx * mx) + (my * my));
+			if (dist < 20) drawText(d.x, d.y - 5, m_nodes[i].m_name, 2.0, scale);
 		}
 		
 		if (!DRAW_DEBUG) {
@@ -526,6 +540,8 @@ function Honey(filePath = "") constructor {
 		
 		var keywordIndex = string_pos(" ", code);
 		var keyword = keywordIndex != 0 ? string_copy(code, 1, keywordIndex - 1) : code;
+		keyword = string_trim(keyword, [ ";" ]);
+		
 		function breakDownValue(value, scope) {
 			function findScope(valueString, scopeStart, valueEnd) {
 				var result = {
@@ -584,7 +600,7 @@ function Honey(filePath = "") constructor {
 						}
 						continue;
 					} 
-					
+						
 					var valueFound = false;
 					switch (type) {
 						case SymbolType.Variable: {
@@ -1000,9 +1016,15 @@ function Honey(filePath = "") constructor {
 			} break;
 			
 			case "return":{
+				var node = getLastNode(nodes);
 				var data = readFormat(code, "return %val%;*", selfInfo.m_scope);
+				if (data != undefined) {
+					appendNode(nodes, addConnection(node, undefined, HoneyConnection.RETURN, data[0]));
+					break;
+				}
+				data = readFormat(code, "return;", selfInfo.m_scope);
 				if (data == undefined) return;
-				appendNode(nodes, addConnection(getLastNode(nodes), getLastNode(nodes), HoneyConnection.RETURN, data[0]));
+				appendNode(nodes, addConnection(node, undefined, HoneyConnection.RETURN, []));
 			} break;			
 			
 			

@@ -1,6 +1,5 @@
 honey.draw(0, 0, room_width, room_height);
 
-
 function updateValue(name, value) {
 	var node = honey.findNode(honey.getVariableName(name));
 	if (node == undefined) return;
@@ -22,5 +21,8 @@ updateValue("screen_size_x", room_width);
 updateValue("screen_size_y", room_height);
 updateValue("delta", 0.01666);
 
-
+if (!m_started) {
+	m_started = true;
+	honey.call("start");	
+}
 honey.call("update");
