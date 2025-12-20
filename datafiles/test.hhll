@@ -1,61 +1,100 @@
-fn update() {
-	if (1) {
-		variable1 = test(1, 3, 4);
-	} elif (0)
-		variable1 = test(2);
-	else
-		variable1 = test(3);
+input_w;
+input_s;
+input_i;
+input_k;
 
-	for i(0|variable1) {
-		variable2 = variable2 * 2;
-	}
-	testvar = 4;
-
-	drawtest();
-}
-
-fn test(arg) {
-	return (arg * 2) + 1;
-}
+delta;
+screen_size_x;
+screen_size_y;
 
 ball_directionX = 0.55;
 ball_directionY = 0.35;
-ball_speed = 10;
+ball_speed = 600.0;
 ball_positionX = 0.0;
 ball_positionY = 0.0;
 ball_sizeX = 10.0;
 ball_sizeY = 10.0;
 
-screen_sizeX = 1366.0;
-screen_sizeY = 768.0;
+paddle_offset = 50.0;
+paddle_speed = 400.0;
+paddle_width = 25.0;
+paddle_height = 100.0;
+paddle_left_position_y = 10.0;
+paddle_right_position_y = 10.0;
 
-fn drawtest() {
-	velocityX = ball_directionX * ball_speed;
-	velocityY = ball_directionY * ball_speed;
+func start() {
+	len = ~sqrt((ball_directionX * ball_directionX) + (ball_directionY * ball_directionY));
+	ball_directionX = ball_directionX / len;
+	ball_directionY = ball_directionY / len;
+}
 
-	if (((ball_positionX + velocityX < 0.0) + (velocityX < 0.0) = 2) + ((ball_positionX + ball_sizeX + velocityX > screen_sizeX) + (velocityX > 0.0) = 2)) {
+func update() {
+	paddle_process();
+	ball_process();
+}
+
+func test_aabb_aabb(x1, y1, w1, h1, x2, y2, w2, h2) {
+	return (
+		(x1 <= (x2 + w2)) +
+		((x1 + w1) >= x2) +
+		(y1 <= (y2 + h2)) +
+		((y1 + h1) >= y2)
+	) = 4;
+}
+
+func paddle_process() {
+	velocityX = ball_directionX * ball_speed * delta;
+	velocityY = ball_directionY * ball_speed * delta;
+
+	paddle_left_position_y = paddle_left_position_y + (input_s - input_w * paddle_speed * delta);
+	if ((ball_directionX < 0.0) + test_aabb_aabb(
+		(ball_positionX + velocityX), (ball_positionY + velocityY),
+		ball_sizeX, ball_sizeY,
+		paddle_offset, paddle_left_position_y,
+		paddle_width, paddle_height
+	) = 2) {
 		ball_directionX = 0.0 - ball_directionX;
-		velocityX = ball_directionX * ball_speed;
 	}
-	if (((ball_positionY + velocityY < 0.0) + (velocityY < 0.0) = 2) + ((ball_positionY + ball_sizeY + velocityY > screen_sizeY) + (velocityY > 0.0) = 2)) {
+	if (paddle_left_position_y < 0.0) {
+		paddle_left_position_y = 0.0;
+	} elif (paddle_left_position_y + paddle_height > screen_size_y) {
+		paddle_left_position_y = screen_size_y - paddle_height;
+	}
+
+	draw rect(paddle_offset|paddle_left_position_y|paddle_width|paddle_height);
+
+	paddle_right_position_y = paddle_right_position_y + (input_k - input_i * paddle_speed * delta);
+	if ((ball_directionX > 0.0) + test_aabb_aabb(
+		(ball_positionX + velocityX), (ball_positionY + velocityY),
+		ball_sizeX, ball_sizeY,
+		(screen_size_x - paddle_offset - paddle_width), paddle_right_position_y,
+		paddle_width, paddle_height
+	) = 2) {
+		ball_directionX = 0.0 - ball_directionX;
+	}
+	if (paddle_right_position_y < 0.0) {
+		paddle_right_position_y = 0.0;
+	} elif (paddle_right_position_y + paddle_height > screen_size_y) {
+		paddle_right_position_y = screen_size_y - paddle_height;
+	}
+	draw rect(screen_size_x - (paddle_offset + paddle_width)|paddle_right_position_y|paddle_width|paddle_height);
+}
+
+func ball_process() {
+	velocityX = ball_directionX * ball_speed * delta;
+	velocityY = ball_directionY * ball_speed * delta;
+
+	if (((ball_positionX + velocityX < 0.0) + (velocityX < 0.0) = 2) + ((ball_positionX + ball_sizeX + velocityX > screen_size_x) + (velocityX > 0.0) = 2)) {
+		ball_directionX = 0.0 - ball_directionX;
+	velocityX = ball_directionX * ball_speed * delta;
+	}
+	if (((ball_positionY + velocityY < 0.0) + (velocityY < 0.0) = 2) + ((ball_positionY + ball_sizeY + velocityY > screen_size_y) + (velocityY > 0.0) = 2)) {
 		ball_directionY = 0.0 - ball_directionY;
-		velocityY = ball_directionY * ball_speed;
+		velocityY = ball_directionY * ball_speed * delta;
 	}
 
 	ball_positionX = ball_positionX + velocityX;
 	ball_positionY = ball_positionY + velocityY;
 
 	draw rect(ball_positionX|ball_positionY|ball_sizeX|ball_sizeY);
-}
-
-fn activitytest() {
-	if (0) {
-		activityvar1 = 86;
-	} elif (0) {
-		activityvar2 = 64;
-	} else {
-		activityvar1 = test(10);
-		activityvar2 = activityvar2 + 100;
-	}
-	return 5;
 }
