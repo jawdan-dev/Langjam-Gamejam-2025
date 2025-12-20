@@ -1,6 +1,5 @@
 honey.draw(0, 0, room_width, room_height);
 
-
 if (keyboard_check_pressed(ord("E"))) {
 	honey.call("activitytest");	
 }
@@ -11,7 +10,6 @@ if (tests > 0) {
 } else {
 	if (random(1000) < 2.0) {
 		tests = 240;
-		show_debug_message("nice");
 	}
 	honey.call("update");
 }

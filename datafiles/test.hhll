@@ -18,14 +18,34 @@ fn test(arg) {
 	return (arg * 2) + 1;
 }
 
+ball_directionX = 0.55;
+ball_directionY = 0.35;
+ball_speed = 10;
+ball_positionX = 0.0;
+ball_positionY = 0.0;
+ball_sizeX = 10.0;
+ball_sizeY = 10.0;
+
+screen_sizeX = 1366.0;
+screen_sizeY = 768.0;
+
 fn drawtest() {
-	x = x + 1;
-	if (x > 100) {
-		x = 0;
+	velocityX = ball_directionX * ball_speed;
+	velocityY = ball_directionY * ball_speed;
+
+	if (((ball_positionX + velocityX < 0.0) + (velocityX < 0.0) = 2) + ((ball_positionX + ball_sizeX + velocityX > screen_sizeX) + (velocityX > 0.0) = 2)) {
+		ball_directionX = 0.0 - ball_directionX;
+		velocityX = ball_directionX * ball_speed;
 	}
-	draw line(50|x|50|150 + x);
-	draw rect(x|0|100|100);
-	draw text(x|150|test thing WHAT);
+	if (((ball_positionY + velocityY < 0.0) + (velocityY < 0.0) = 2) + ((ball_positionY + ball_sizeY + velocityY > screen_sizeY) + (velocityY > 0.0) = 2)) {
+		ball_directionY = 0.0 - ball_directionY;
+		velocityY = ball_directionY * ball_speed;
+	}
+
+	ball_positionX = ball_positionX + velocityX;
+	ball_positionY = ball_positionY + velocityY;
+
+	draw rect(ball_positionX|ball_positionY|ball_sizeX|ball_sizeY);
 }
 
 fn activitytest() {
